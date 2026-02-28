@@ -19,7 +19,7 @@ System_Ext(s3_cdn, "S3 / CDN", "Хранилище и доставка меди�
 
 System_Boundary(cinemaabyss, "Кинобездна") {
 
-    ' --- Уровень: Observability  ---
+    ' --- Уровень: Observability ---
     Container_Boundary(obs, "Наблюдаемость") {
         Container(grafana, "Grafana", "Grafana", "Дашборды, алертинг")
         Container(prometheus, "Prometheus", "Prometheus", "Сбор метрик (/metrics)")
@@ -61,16 +61,13 @@ System_Boundary(cinemaabyss, "Кинобездна") {
     }
 
     ' --- Уровень: Kafka ---
-    ContainerQueue(kafka, "═══════════════  Apache Kafka  ═══════════════", "Kafka", "Асинхронная шина событий — связывает все микросервисы\nТопики: user-events | movie-events | payment-events | view-events | interaction-events")
+    ContainerQueue(kafka, "Apache Kafka", "Kafka", "Асинхронная шина событий — связывает все микросервисы\nТопики: user-events | movie-events | payment-events | view-events | interaction-events")
 
     ' Принудительный порядок уровней сверху вниз
     obs -[hidden]d-> api_gw
     api_gw -[hidden]d-> services
     services -[hidden]d-> datastores
     datastores -[hidden]d-> kafka
-
-    ' Observability слева
-    obs -[hidden]r-> api_gw
 }
 
 Rel_D(web_user, api_gw, "HTTPS", "X-Client-Type: web")
@@ -90,27 +87,39 @@ Rel_D(interaction_svc, interaction_db, "R/W", "SQL")
 Rel_D(billing_svc, billing_db, "R/W", "SQL")
 Rel_D(streaming_svc, streaming_db, "R/W", "SQL")
 
-Rel(auth_svc, redis, "Кэш сессий", "")
-Rel(content_svc, redis, "Кэш метаданных", "")
-Rel(api_gw, redis, "Rate limiting", "")
+Rel_R(auth_svc, redis, "Кэш сессий/JWT", "")
+Rel_R(content_svc, redis, "Кэш метаданных", "")
+Rel_R(api_gw, redis, "Rate limiting", "")
+Rel_R(streaming_svc, redis, "Кэш сессий просмотра", "")
 
+' --- Kafka: Producers ---
 Rel_D(auth_svc, kafka, "user-events", "Producer")
 Rel_D(content_svc, kafka, "movie-events", "Producer")
 Rel_D(interaction_svc, kafka, "interaction-events", "Producer")
 Rel_D(billing_svc, kafka, "payment-events", "Producer")
 Rel_D(streaming_svc, kafka, "view-events", "Producer")
 
+' --- Kafka: Consumers ---
+Rel_U(kafka, auth_svc, "payment-events", "Consumer")
+Rel_U(kafka, content_svc, "interaction-events", "Consumer")
 Rel_U(kafka, interaction_svc, "movie-events", "Consumer")
 Rel_U(kafka, billing_svc, "user-events", "Consumer")
 Rel_U(kafka, streaming_svc, "payment-events", "Consumer")
 
-Rel_R(kafka, rec_system, "view + interaction events", "Consumer")
+Rel_R(kafka, rec_system, "view-events, interaction-events", "Consumer")
 
 Rel_R(billing_svc, payment_provider, "Платежи", "HTTPS")
 Rel_R(streaming_svc, online_cinemas, "Контент", "HTTPS")
 Rel_R(streaming_svc, s3_cdn, "Видео", "S3 API")
 
-Rel(prometheus, services, "Сбор метрик со всех сервисов", "/metrics")
+' --- Observability: сбор метрик с каждого сервиса ---
+Rel(prometheus, api_gw, "Сбор метрик", "/metrics")
+Rel(prometheus, auth_svc, "Сбор метрик", "/metrics")
+Rel(prometheus, content_svc, "Сбор метрик", "/metrics")
+Rel(prometheus, interaction_svc, "Сбор метрик", "/metrics")
+Rel(prometheus, billing_svc, "Сбор метрик", "/metrics")
+Rel(prometheus, streaming_svc, "Сбор метрик", "/metrics")
+
 Rel(grafana, prometheus, "Визуализация", "PromQL")
 Rel(grafana, loki, "Логи", "LogQL")
 Rel(grafana, jaeger, "Трейсы", "API")
