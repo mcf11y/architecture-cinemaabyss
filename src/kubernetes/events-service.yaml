@@ -23,7 +23,7 @@ spec:
       containers:
       - name: events-service
         image: ghcr.io/mcf11y/architecture-cinemaabyss/events-service:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8082
         env:
@@ -36,11 +36,11 @@ spec:
             name: cinemaabyss-config
         resources:
           limits:
-            cpu: "300m"
+            cpu: "200m"
             memory: "256Mi"
           requests:
-            cpu: "100m"
-            memory: "128Mi"
+            cpu: "50m"
+            memory: "64Mi"
         readinessProbe:
           httpGet:
             path: /api/events/health

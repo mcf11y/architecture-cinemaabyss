@@ -59,7 +59,9 @@
 Необходимые тесты для проверки этого API вызываются при запуске npm run test:local из папки tests/postman 
 Приложите скриншот тестов и скриншот состояния топиков Kafka из UI http://localhost:8090 
 
-скриншот тестов - [1](./screenshots/tests.png)
+[скриншот kafka тестов](./screenshots/tests_kafka.png)
+
+
 скриншот kafka UI:
 [1](./screenshots/kafk_ui_1.png)
 [2](./screenshots/kafka_ui_2.png)
@@ -71,7 +73,6 @@
 Вам, как архитектору осталось самое сложное:
  - реализовать CI/CD для сборки прокси сервиса
  - реализовать необходимые конфигурационные файлы для переключения трафика.
-
 
 ### CI/CD
 
@@ -281,6 +282,13 @@ cat .docker/config.json | base64
 #### Шаг 3
 Добавьте сюда скриншота вывода при вызове https://cinemaabyss.example.com/api/movies и  скриншот вывода event-service после вызова тестов.
 
+ [скриншот тестов kubernetes](./screenshots/tests_kuber.png)
+
+
+ [скришот логов event-service](./screenshots/consumer_producer.png)
+
+
+ [скриншот http://cinemaabyss.example.com/api/movies](./screenshots/cinema_example_com.png)
 
 # Задание 4
 Для простоты дальнейшего обновления и развертывания вам как архитектуру необходимо так же реализовать helm-чарты для прокси-сервиса и проверить работу 
@@ -355,6 +363,10 @@ minikube tunnel
 Потом вызовите 
 https://cinemaabyss.example.com/api/movies
 и приложите скриншот развертывания helm и вывода https://cinemaabyss.example.com/api/movies
+
+[скриншот https://cinemaabyss.example.com/api/movies](./screenshots/example_com_helm.png)
+
+[скриншот развертывания helm](./screenshots/helm_deploy.png)
 
 ## Удаляем все
 
