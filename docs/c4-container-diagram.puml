@@ -1,0 +1,135 @@
+@startuml CinemaAbyss_To_Be_Container_Diagram
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+LAYOUT_WITH_LEGEND()
+
+title Контейнерная диаграмма To-Be — «Кинобездна»
+
+Person(web_user, "Web-пользователь", "Ноутбук / десктоп, SPA")
+Person(mobile_user, "Mobile-пользователь", "iOS / Android")
+Person(tv_user, "Smart TV пользователь", "Приложение для ТВ")
+
+web_user -[hidden]r-> mobile_user
+mobile_user -[hidden]r-> tv_user
+
+System_Ext(rec_system, "Рекомендательная система", "Внешняя система подборок контента")
+System_Ext(payment_provider, "Платёжные провайдеры", "Stripe, PayPal и др.")
+System_Ext(online_cinemas, "Онлайн-кинотеатры", "Источники видеоконтента")
+System_Ext(s3_cdn, "S3 / CDN", "Хранилище и доставка медиа")
+
+System_Boundary(cinemaabyss, "Кинобездна") {
+
+    ' --- Уровень: Observability ---
+    Container_Boundary(obs, "Наблюдаемость") {
+        Container(grafana, "Grafana", "Grafana", "Дашборды, алертинг")
+        Container(prometheus, "Prometheus", "Prometheus", "Сбор метрик (/metrics)")
+        Container(loki, "Loki", "Grafana Loki", "Логирование")
+        Container(jaeger, "Jaeger", "Jaeger", "Трассировка")
+    }
+
+    ' --- Уровень: Gateway ---
+    Container(api_gw, "API Gateway", "Go", "Единая точка входа, BFF\n(X-Client-Type: web|mobile|tv)\nStrangler Fig, circuit breaker\nrate limiting")
+
+    ' --- Уровень: Сервисы ---
+    Container_Boundary(services, "Бизнес-сервисы") {
+        Container(auth_svc, "Auth & Users Service", "Go", "Регистрация, логин\nOAuth2/JWT, профили")
+        Container(content_svc, "Content Catalog Service", "Go", "Метаданные фильмов\nжанры, поиск")
+        Container(interaction_svc, "User Interaction Service", "Go", "Оценки, отзывы\nизбранное")
+        Container(billing_svc, "Billing Service", "Go", "Платежи, подписки\nтарифные планы")
+        Container(streaming_svc, "Streaming Service", "Go", "Доставка видео\nтрекинг просмотров")
+
+        auth_svc -[hidden]r-> content_svc
+        content_svc -[hidden]r-> interaction_svc
+        interaction_svc -[hidden]r-> billing_svc
+        billing_svc -[hidden]r-> streaming_svc
+    }
+
+    ' --- Уровень: Хранилища ---
+    Container_Boundary(datastores, "Хранилища данных") {
+        ContainerDb(auth_db, "Auth DB", "PostgreSQL", "users, roles")
+        ContainerDb(content_db, "Content DB", "PostgreSQL", "movies, movie_genres\n(+ES в фазе 2)")
+        ContainerDb(interaction_db, "Interaction DB", "PostgreSQL", "user_ratings, favorites")
+        ContainerDb(billing_db, "Billing DB", "PostgreSQL", "payments, subscriptions")
+        ContainerDb(streaming_db, "Streaming DB", "PostgreSQL", "views, streams\n(+CH в фазе 3)")
+        ContainerDb(redis, "Redis", "Redis", "Кэш сессий/JWT\nметаданные, rate limit")
+
+        auth_db -[hidden]r-> content_db
+        content_db -[hidden]r-> interaction_db
+        interaction_db -[hidden]r-> billing_db
+        billing_db -[hidden]r-> streaming_db
+        streaming_db -[hidden]r-> redis
+    }
+
+    ' --- Уровень: Kafka ---
+    ContainerQueue(kafka, "Apache Kafka", "Kafka", "Асинхронная шина событий — связывает все микросервисы\nТопики: user-events | movie-events | payment-events | view-events | interaction-events")
+
+    ' Принудительный порядок уровней сверху вниз
+    obs -[hidden]d-> api_gw
+    api_gw -[hidden]d-> services
+    services -[hidden]d-> datastores
+    datastores -[hidden]d-> kafka
+}
+
+Rel_D(web_user, api_gw, "HTTPS", "X-Client-Type: web")
+Rel_D(mobile_user, api_gw, "HTTPS", "X-Client-Type: mobile")
+Rel_D(tv_user, api_gw, "HTTPS", "X-Client-Type: tv")
+
+Rel_D(api_gw, auth_svc, "Аутентификация", "REST")
+Rel_D(api_gw, content_svc, "Каталог", "REST")
+Rel_D(api_gw, interaction_svc, "Оценки", "REST")
+Rel_D(api_gw, billing_svc, "Платежи", "REST")
+Rel_D(api_gw, streaming_svc, "Стриминг", "REST")
+Rel_R(api_gw, rec_system, "Рекомендации", "REST")
+
+Rel_D(auth_svc, auth_db, "R/W", "SQL")
+Rel_D(content_svc, content_db, "R/W", "SQL")
+Rel_D(interaction_svc, interaction_db, "R/W", "SQL")
+Rel_D(billing_svc, billing_db, "R/W", "SQL")
+Rel_D(streaming_svc, streaming_db, "R/W", "SQL")
+
+Rel_R(auth_svc, redis, "Кэш сессий/JWT", "")
+Rel_R(content_svc, redis, "Кэш метаданных", "")
+Rel_R(api_gw, redis, "Rate limiting", "")
+Rel_R(streaming_svc, redis, "Кэш сессий просмотра", "")
+
+' --- Kafka: Producers ---
+Rel_D(auth_svc, kafka, "user-events", "Producer")
+Rel_D(content_svc, kafka, "movie-events", "Producer")
+Rel_D(interaction_svc, kafka, "interaction-events", "Producer")
+Rel_D(billing_svc, kafka, "payment-events", "Producer")
+Rel_D(streaming_svc, kafka, "view-events", "Producer")
+
+' --- Kafka: Consumers ---
+Rel_U(kafka, auth_svc, "payment-events", "Consumer")
+Rel_U(kafka, content_svc, "interaction-events", "Consumer")
+Rel_U(kafka, interaction_svc, "movie-events", "Consumer")
+Rel_U(kafka, billing_svc, "user-events", "Consumer")
+Rel_U(kafka, streaming_svc, "payment-events", "Consumer")
+
+Rel_R(kafka, rec_system, "view-events, interaction-events", "Consumer")
+
+Rel_R(billing_svc, payment_provider, "Платежи", "HTTPS")
+Rel_R(streaming_svc, online_cinemas, "Контент", "HTTPS")
+Rel_R(streaming_svc, s3_cdn, "Видео", "S3 API")
+
+' --- Observability: сбор метрик с каждого сервиса ---
+Rel(prometheus, api_gw, "Сбор метрик", "/metrics")
+Rel(prometheus, auth_svc, "Сбор метрик", "/metrics")
+Rel(prometheus, content_svc, "Сбор метрик", "/metrics")
+Rel(prometheus, interaction_svc, "Сбор метрик", "/metrics")
+Rel(prometheus, billing_svc, "Сбор метрик", "/metrics")
+Rel(prometheus, streaming_svc, "Сбор метрик", "/metrics")
+
+Rel(grafana, prometheus, "Визуализация", "PromQL")
+Rel(grafana, loki, "Логи", "LogQL")
+Rel(grafana, jaeger, "Трейсы", "API")
+
+note right of streaming_db
+  **Roadmap миграции:**
+  Фаза 1 (мес. 1-2): PostgreSQL + Redis
+  Фаза 2 (мес. 4-5): + Elasticsearch
+  Фаза 3 (мес. 6-8): + ClickHouse
+  Фаза 4: Разделение BFF
+end note
+
+@enduml

@@ -1,0 +1,13 @@
+{
+  "name": "cinemaabyss-events-service",
+  "version": "1.0.0",
+  "description": "Kafka Events MVP Service for CinemaAbyss",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "kafkajs": "^2.2.4"
+  }
+}
